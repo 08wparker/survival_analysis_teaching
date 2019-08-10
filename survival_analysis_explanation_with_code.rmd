@@ -1,0 +1,193 @@
+---
+title: "Explaining survival analysis"
+author: William F Parker
+output:
+  html_notebook:
+    theme: journal
+    toc: yes
+    toc_depth: 2
+    toc_float: yes
+---
+
+```{r libraries, include=FALSE}
+
+library(tidyverse)
+
+library(survival)
+```
+
+
+#The Survival function
+
+The function we are most interested in medicine is the survival function
+
+$S(t) = Pr(T> t)$
+
+In words: what is the probability the patient be alive at time $t$?
+
+##cumulative incidence function 
+
+The complement of the survival function is $F(t)$
+
+$F(t) = 1 - S(t)$
+
+In words: what is the probability the patient dies **before** time $t$?
+
+##Death "rate"
+
+We take the derivative (yes calculus) to get the **probability density** $f(t)$ of death at a given time t
+
+$f(t) =\frac{d}{dt}F(t)$
+
+And remember that since $S(t) = 1 - F(t)$, we also have
+
+$S'(t) = -f(t)$
+
+In words: $f(t)$ the negative of the *slope* of the survival function
+
+Can be used to find the probability a death occurs between two times, i.e.
+
+$P(death \space during \space days \space 5-10) = \int_{5}^{10} f(t) d(t) = F(t =10) - F(t =5)$
+
+*NOTE*: this is **NOT** the hazard function, we will get to that!
+
+##Build a survival function assuming a normal distribution of failure times
+```{r}
+df <- tibble(time = seq(0,100, 1),
+             f_t = dnorm(time, mean = 50, sd = 20))
+
+
+ggplot(df, aes(x = time, y = f_t)) + geom_point() + labs(y = "f(t)")
+```
+So the highest density (fastest rate) of failure times will be around 50 days.
+
+We should expect the drop is $S(t)$ to start off slow then accelerate up to a maximum decline at 50 days, then slow down again.
+
+## Construct Survival Function from f(t)
+```{r add_vars}
+df <- df %>%
+  mutate(F_t = cumsum(f_t),
+         S_t = 1 - F_t)
+
+
+ggplot(df, aes(x = time, y = S_t)) + geom_step() + labs(y = "S(t)")
+```
+
+Looks good!
+
+##Kaplan-Meier
+
+In reality, we don't know $f(t)$. A kaplan-meier curve is a **non-parametric** method to construct $S(t)$ from a dataset of failure times.
+
+We will use a dataset that comes with the `survival` package to demonstrate KM
+
+```{r}
+ovarian %>% select(time = futime, dead = fustat)
+```
+ A typical dataset with times and status, with death (or failure) indicated by a binary variable
+ 
+$\displaystyle {\widehat {S}}(t)=\prod \limits _{i:\ t_{i}\leq t}\left(1-{\frac {d_{i}}{n_{i}}}\right)$
+
+where $d_i$ are the number of deaths that happen at time $t_i$ and $n_i$ are the number of patients surviving up until time $t_i$
+ 
+```{r}
+plot(survfit(Surv(time = ovarian$futime, event = ovarian$fustat) ~ 1 , data = ovarian), ylab = "S(t)", xlab = "Time")
+```
+Kaplan-meier estimate of the survival function $S(t)$. Notice how the confidence intervals get wider as the number remaining in the study decreases as patients die or are censored.
+
+
+
+#The Hazard Function
+
+##a key concept in biomedical survival analysis
+
+$h(t) = \lim_{dt \to 0}P(t > T > t + dt | T ≥ t)$
+
+In words: probability of dying in next $dt$ instant conditional upon survival to time T
+
+Also called the **instantaneous force of mortality**
+
+## getting h(t) from S(t)
+
+remember (or learn) bayes theorem
+
+$P(A|B) = \frac{P(B|A)*P(A)}{P(B)}$
+
+
+##Applying bayes to the hazard function equation  
+
+$h(t) = \lim_{dt \to 0} \frac{P(T ≥ t| t< T < t + dt)*P(t>T>t+dt)}{P(T≥t)}$
+
+It turns out $f(t) = \lim_{dt \to 0} P(t> T > t+ dt)$ and of course $S(t) = Pr(T> t)$ so we get
+
+$h(t) = \frac{f(t)}{S(t)}$
+
+Remember from above $f(t) = -S'(t)$, so
+
+$h(t) = \frac{S'(t)}{S(t)}$
+
+Bingo! Now we can estimate $h(t)$ given any $S(t)$
+
+##Back to our original example
+```{r}
+df <- df %>%
+  mutate(h_t = f_t/S_t)
+
+ggplot(df, aes(x = time, y = h_t)) + geom_point()
+```
+Notice that this definitely is **NOT** the derivative of $S(t)$! However this is the core concept that a cox proportional hazards model is based on, 
+
+$h(t) = h_o(t)*exp(\bf{XB})$
+
+##Cumulative hazard
+
+The integral of the hazard function
+
+$H(t) = \int_{0}^{t}h(u)du$
+
+so plugging the representation of the hazard function in terms of the survival function we have
+
+$H(t) = \int_{0}^{t}\frac{S'(u)}{S(u)}du$
+
+For those who took differential equations, integral has a nice solution
+
+$H(t) = -log(S(t))$
+
+exponentiating both sides
+
+$S(t) = exp(-H(t))$
+
+```{r}
+df <- df %>% mutate(
+         H_t= - log(S_t))
+
+ggplot(df, aes(x = time, y = H_t)) + geom_point() +labs(y = "Cumulative Hazard")
+```
+Notice how this blows right through 1, cumulative hazard should **NOT** be confused with cumulative incidence $F(t)$
+
+## Going from h(t) or H(t) to S(t)
+
+Starting with 
+
+$H(t) = -log(S(t))$
+
+exponentiating both sides
+
+$S(t) = exp(-H(t))$
+
+The cumulative product $\prod_{1}^{t}(1-h(t))$ is also a valid of approximation of S(t) in a discrete time dataset like our example because
+
+$P(alive\space t +1 | alive \space t) = 1 - h(t)$
+
+$S(t+1) = S(t)*(1-h(t))$
+
+```{r}
+df <- df %>% mutate(
+        S_exp_neg_Ht = exp(-H_t),
+         S_cumprod_1_minus_h_t = cumprod(1-h_t))
+
+df
+```
+
+
+
