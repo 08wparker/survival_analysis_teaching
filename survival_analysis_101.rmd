@@ -17,15 +17,21 @@ library(survival)
 ```
 
 
-#The Survival function
+# Time to die 
 
-The function we are most interested in medicine is the survival function
+The question: at what time $T$ will my patient die?
+
+The answer: we can **never** say precisely. However we can estimate the probability a patient is alive at any particular time $t$
+
+# Think about adding avengers example
+
+## The survival function
 
 $S(t) = Pr(T> t)$
 
-In words: what is the probability the patient be alive at time $t$?
+In words: what is the probability the patient be alive at time $T$?
 
-##cumulative incidence function 
+## Cumulative incidence function 
 
 The complement of the survival function is $F(t)$
 
@@ -33,7 +39,7 @@ $F(t) = 1 - S(t)$
 
 In words: what is the probability the patient dies **before** time $t$?
 
-##Death "rate"
+## Death "rate"
 
 We take the derivative (yes calculus) to get the **probability density** $f(t)$ of death at a given time t
 
@@ -51,7 +57,7 @@ $P(death \space during \space days \space 5-10) = \int_{5}^{10} f(t) d(t) = F(t 
 
 *NOTE*: this is **NOT** the hazard function, we will get to that!
 
-##Build a survival function assuming a normal distribution of failure times
+## Build a survival function assuming a normal distribution of failure times
 ```{r}
 df <- tibble(time = seq(0,100, 1),
              f_t = dnorm(time, mean = 50, sd = 20))
@@ -75,13 +81,13 @@ ggplot(df, aes(x = time, y = S_t)) + geom_step() + labs(y = "S(t)")
 
 Looks good!
 
-##Kaplan-Meier
+## Kaplan-Meier
 
 In reality, we don't know $f(t)$. A kaplan-meier curve is a **non-parametric** method to construct $S(t)$ from a dataset of failure times.
 
 We will use a dataset that comes with the `survival` package to demonstrate KM
 
-```{r}
+```{r sample data}
 ovarian %>% select(time = futime, dead = fustat)
 ```
  A typical dataset with times and status, with death (or failure) indicated by a binary variable
@@ -97,7 +103,7 @@ Kaplan-meier estimate of the survival function $S(t)$. Notice how the confidence
 
 
 
-#The Hazard Function
+# The Hazard Function
 
 ##a key concept in biomedical survival analysis
 
@@ -114,7 +120,7 @@ remember (or learn) bayes theorem
 $P(A|B) = \frac{P(B|A)*P(A)}{P(B)}$
 
 
-##Applying bayes to the hazard function equation  
+## Applying bayes to the hazard function equation  
 
 $h(t) = \lim_{dt \to 0} \frac{P(T ≥ t| t< T < t + dt)*P(t>T>t+dt)}{P(T≥t)}$
 
@@ -128,18 +134,20 @@ $h(t) = \frac{S'(t)}{S(t)}$
 
 Bingo! Now we can estimate $h(t)$ given any $S(t)$
 
-##Back to our original example
+## Back to our original example
 ```{r}
 df <- df %>%
   mutate(h_t = f_t/S_t)
 
-ggplot(df, aes(x = time, y = h_t)) + geom_point()
+ggplot(df, aes(x = time, y = h_t)) + 
+  geom_point() +
+  labs(y = "h(t)")
 ```
 Notice that this definitely is **NOT** the derivative of $S(t)$! However this is the core concept that a cox proportional hazards model is based on, 
 
 $h(t) = h_o(t)*exp(\bf{XB})$
 
-##Cumulative hazard
+## Cumulative hazard
 
 The integral of the hazard function
 
@@ -190,4 +198,31 @@ df
 ```
 
 
+## In the case of cox proportional hazards model
 
+
+$h(t) = h_o(t)*exp(\bf{XB})$
+
+
+
+$H(t) = H_o(t)*exp(\bf{XB})$
+
+
+So
+
+$S(t) = exp(-H_o(t)*exp(\bf{XB}))$
+
+
+which reduces to 
+
+$S(t) = exp(logS_o(t)*exp(\bf{XB}))$
+
+and using some exponential math rules
+
+$S(t) = exp(logS_o(t))^{exp(\bf{XB})}$
+
+we get our solution!
+
+$S(t) = S_o(t)^{exp(\bf{XB})}$
+
+Now given a patients $\bf{XB}$ we can generate a unique survival prediction.
