@@ -1,0 +1,121 @@
+---
+title: "Informative Censoring"
+author: Will Parker
+output:
+    html_notebook:
+      toc: yes
+      toc_depth: 2
+      toc_float: yes
+---
+
+
+# Introduction 
+
+This notebook is an explanation of the potential for informative censoring to bias Kaplan-Meier estimators, motivated a recent publication by Cogswell et al in JHLT, [An Early Investigation of Outcomes with the New 2018 Donor Heart Allocation System in the United States](https://www.ncbi.nlm.nih.gov/pubmed/31810767) examining outcomes after the implementation of a new heart allocation policy.
+
+Please also read our letter to the editor [Is it too early to investigate survival outcomes of the new US heart allocation system?](https://doi.org/10.1016/j.healun.2020.01.1343) for more details.
+
+
+```{r libraries, warning = FALSE, message = FALSE}
+library(tidyverse)
+library(survival)
+library(ggfortify)
+```
+
+```{r include = FALSE, warning = FALSE, message = FALSE}
+comma <- function(x){
+  case_when(
+    abs(x) > 10 ~ format(x, digits = 0, big.mark = ","),
+    abs(x) > 1 ~ format(x, digits = 2, big.mark = ","),
+    TRUE ~ format(x, digits = 2, big.mark = ",")
+  )
+    
+}
+```
+
+
+# Create a simulated dataset
+
+I use a Weibull distribution to create simulated survival data with censoring at 160 days and an estimated survial of just over 90%.  Then I randomly assign two groups. This approximates the "null hypothesis" that there is no survival difference between the two groups
+
+```{r create_data, warning = FALSE, message = FALSE}
+set.seed(1236)
+
+N <- 2000
+shape <- 0.5
+scale <- 20000
+end_of_follow_up <- 161
+
+df <- tibble(time = round(rweibull(n = N, shape =shape, scale =scale))) %>%
+  mutate(
+    status = ifelse(time>end_of_follow_up, 0, 1),
+    time = ifelse(status == 0, end_of_follow_up, time),
+    group = case_when(
+        row_number()%% 2 == 0 ~ "A",
+        TRUE ~ "B"
+  )) 
+
+autoplot(survfit(Surv(time, status) ~ group, data = df)) +  
+  lims(x = c(0,160), y = c(0.6, 1))
+```
+
+
+# Add random censoring
+
+Now I randomly right-censor a portion of the population
+```{r random_censoring_params, warning = FALSE, message = FALSE}
+censor_proproption <- 0.25
+```
+
+
+```{r random_censoring, warning = FALSE, message = FALSE}
+random_u <- runif(n = nrow(df))
+
+df_random_censor <- df %>%
+  cbind(random_u) %>%
+  mutate(status = case_when(
+    random_u > censor_proproption ~ 1,
+    TRUE ~ 0
+  ))
+
+autoplot(survfit(Surv(time, status) ~ group, data = df_random_censor))+ lims(x = c(0,160), y = c(0.6, 1))
+```
+
+With random censoring, we recover more or less the same result as the K-M estimator without censoring. That's the reason the K-M estimator was such a breakthrough- it can deal with right-censoring. However, the necessary assumption is that the censoring is *non-informative*, or unrelated to risk of death. If censored patients are more or less likely to die than non-censored patients, that is problematic... 
+
+
+# Add heavy informative censoring
+
+Now I'll add informative censoring to *just* group A.
+
+```{r random_censor_parameters}
+inform_censor_time <- 30 
+
+censor_proportion <- 0.8
+```
+
+Specifically, I do this by randomly censoring `r comma(100*censor_proportion)`% patients who make it to the end of follow-up  between `r inform_censor_time` - `r 2*inform_censor_time` days. Effectively we no longer observe that these patients made it to the end of our study, instead we have to assume that they had the same "survival experience" as the patients who we do have follow-up on- several of whom died. 
+
+
+```{r random_censor, warning = FALSE, message = FALSE}
+random_u <- runif(n = nrow(df))
+random_u_2 <- runif(n = nrow(df))
+
+df_inform_censor <- df %>%
+  cbind(random_u, random_u_2) %>%
+  mutate(
+    inform_censor = ifelse(group == "A" & time == end_of_follow_up & random_u < censor_proportion, 1, 0),
+    status = case_when(
+       inform_censor == 1 ~ 0,
+       TRUE ~ status
+  ),
+  time = ifelse(inform_censor == 1, random_u_2*inform_censor_time + inform_censor_time, time)
+  )
+
+autoplot(survfit(Surv(time, status) ~ group, data = df_inform_censor))+ lims(x = c(0,160), y = c(0.5, 1))
+
+```
+
+Now the K-M estimates at 160 days are substantially different, with group A (the informaitvely censored group) having a significantly lower 6-month survival estimate. 
+
+
