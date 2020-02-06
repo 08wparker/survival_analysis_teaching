@@ -1,12 +1,9 @@
 ---
 title: "Explaining survival analysis"
 author: William F Parker
-output:
-  html_notebook:
-    theme: journal
-    toc: yes
-    toc_depth: 2
-    toc_float: yes
+output: 
+  beamer_presentation:
+    latex_engine: xelatex
 ---
 
 ```{r libraries, include=FALSE}
@@ -23,15 +20,22 @@ The question: at what time $T$ will my patient die?
 
 The answer: we can **never** say precisely. However we can estimate the probability a patient is alive at any particular time $t$
 
-# Think about adding avengers example
+# Avengers example
 
-## The survival function
+```{r}
+
+avenger <- c("")
+
+```
+
+
+# The survival function
 
 $S(t) = Pr(T> t)$
 
 In words: what is the probability the patient be alive at time $T$?
 
-## Cumulative incidence function 
+# Cumulative incidence function 
 
 The complement of the survival function is $F(t)$
 
@@ -39,7 +43,7 @@ $F(t) = 1 - S(t)$
 
 In words: what is the probability the patient dies **before** time $t$?
 
-## Death "rate"
+# Death "rate"
 
 We take the derivative (yes calculus) to get the **probability density** $f(t)$ of death at a given time t
 
@@ -69,7 +73,7 @@ So the highest density (fastest rate) of failure times will be around 50 days.
 
 We should expect the drop is $S(t)$ to start off slow then accelerate up to a maximum decline at 50 days, then slow down again.
 
-## Construct Survival Function from f(t)
+# Construct Survival Function from f(t)
 ```{r add_vars}
 df <- df %>%
   mutate(F_t = cumsum(f_t),
@@ -107,7 +111,11 @@ Kaplan-meier estimate of the survival function $S(t)$. Notice how the confidence
 
 ##a key concept in biomedical survival analysis
 
-$h(t) = \lim_{dt \to 0}P(t > T > t + dt | T ≥ t)$
+$h(t) = \lim_{dt \to 0}P(t > T > t + dt | T \geq t)$
+
+Or alternatively: 
+
+$h(t) = P(T = t | T \geq t)$
 
 In words: probability of dying in next $dt$ instant conditional upon survival to time T
 
@@ -122,7 +130,7 @@ $P(A|B) = \frac{P(B|A)*P(A)}{P(B)}$
 
 ## Applying bayes to the hazard function equation  
 
-$h(t) = \lim_{dt \to 0} \frac{P(T ≥ t| t< T < t + dt)*P(t>T>t+dt)}{P(T≥t)}$
+$h(t) = \lim_{dt \to 0} \frac{P(T \geq t| t< T < t + dt)*P(t>T>t+dt)}{P(T \geq t)}$
 
 It turns out $f(t) = \lim_{dt \to 0} P(t> T > t+ dt)$ and of course $S(t) = Pr(T> t)$ so we get
 

@@ -3,8 +3,11 @@
 
 # But not these files...
 !.gitignore
-!*.rmd
+!informative_censoring.rmd
+
+!informative_censoring.nb.html
 # etc...
 
 # ...even if they are in subdirectories
 !*/
+.Rproj.user
